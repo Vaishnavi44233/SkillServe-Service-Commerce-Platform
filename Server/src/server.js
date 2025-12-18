@@ -1,13 +1,18 @@
 const express = require("express")
 const dotenv = require("dotenv")
 const connectDB = require("./config/db")
+const userRoute = require("./routes/route")
+
 
 const app = express()
 
 app.use(express.json());
 app.use(express.urlencoded({extended: true}));
+app.use("/", userRoute);
 
-dotenv.config()
+
+dotenv.config();
+
 app.get("/",(req, res)=>{
     res.send({msg: "SkillServe API is Running"})
 })
