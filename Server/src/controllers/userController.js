@@ -104,33 +104,50 @@ const signUpUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     let data = req.body;
-    if (Object.keys(data).length === 0) {
+
+    //Validation
+    if (!data || Object.keys(data).length === 0) {
       return res.status(400).json({ msg: "Bad Request ! No Data Provided" });
     }
 
-    let { email, password } = data;
-    if (!isValid(email)) {
+    let { email, password, authProvider } = data;
+
+    if(!isValid(authProvider)){
+      return res.status(400).json({msg : "Auth Provider is required"});
+    }
+
+    if(authProvider !== "manual"){
+      return res.status(400).json({msg : "Use respective login API for google or OTP Auhtentication"});
+    }
+
+    if (!isValid(email) || !isValidEmail(email)) {
       return res.status(400).json({ msg: "Email is required" });
     }
+
     if (!isValid(password)) {
       return res.status(400).json({ msg: "password is required" });
     }
 
-    let user = await userModel.findOne({ email });
+    let user = await userModel.findOne({ email }).select("+password");
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
     }
 
-    let passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
+    if(user.authProvider !== "manual"){
+      return res.status(400).json({msg: `This Email Registered using ${user.authProvider} login`})
+    }
+
+    let isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatch) {
       return res.status(401).json({ msg: "Incorrect Password" });
     }
 
     let token = jwt.sign(
       {
         userId: user._id,
+        role: user.role,
       },
-      "SkillServe",
+      process.env.JWT_SECRET_KEY,
       { expiresIn: "24h" }
     );
 
@@ -165,17 +182,14 @@ const googleLogin = async (req, res)=>{
 // Update user profile
 const updateUserProfile = async (req, res) => {
   try {
-    let id = req.params.id;
+    let id = req.userId;
+    let userData = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: "Invalid Id" });
+    if (!userData || Object.keys(userData).length === 0) {
+      return res.status(400).json({ msg: "add Request ! No data Provided." });
     }
 
-    if (Object.keys(userData).length === 0) {
-      return res.status(400).json({ msg: "ad Request ! No data Provided." });
-    }
-
-    let { name, email, contactNo, password } = userData;
+    let { name, email, phone, password } = userData;
     if (name !== undefined) {
       if (!isValid(name)) {
         return res.status(400).json({ msg: "Name is required" });
@@ -198,16 +212,16 @@ const updateUserProfile = async (req, res) => {
       }
     }
 
-    if (contactNo !== undefined) {
-      if (!isValid(contactNo)) {
-        return res.status(400).json({ msg: "Contact Number is required" });
+    if (phone !== undefined) {
+      if (!isValid(phone)) {
+        return res.status(400).json({ msg: "Phone Number is required" });
       }
-      if (!isValidContact(contactNo)) {
-        return res.status(400).json({ msg: "Invalid Contact Number" });
+      if (!isValidContact(phone)) {
+        return res.status(400).json({ msg: "Invalid Phone Number" });
       }
-      let duplicateContact = await userModel.findOne({ contactNo });
-      if (duplicateContact) {
-        return res.status(400).json({ msg: "Contact number is already Exit" });
+      let duplicatePhone = await userModel.findOne({ phone });
+      if (duplicatePhone) {
+        return res.status(400).json({ msg: "Phone number is already Exit" });
       }
     }
 
@@ -219,16 +233,16 @@ const updateUserProfile = async (req, res) => {
         return res.status(400).json({ msg: "Invalid password" });
       }
 
-      userData.password = await bcrypt.hash(password, salt);
+      userData.password = await bcrypt.hash(password, 10);
     }
 
 
-    let update = await userModel.findByIdAndUpdate(id, userdata, { new: true });
+    let update = await userModel.findByIdAndUpdate(id, userData, { new: true });
     if (!update) {
       return res.status(404).json({ msg: "User Not found" });
     }
 
-    return res.status(200).json({ msg: "user updated successfully", update });
+    return res.status(200).json({ msg: "user updated successfully", data: update });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ msg: "Internal Server Error", error});
@@ -240,10 +254,6 @@ const updateUserProfile = async (req, res) => {
 const deleteUser = async (req, res) => {
   try {
     let id = req.params.id;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: "Invalid Id" });
-    }
 
     let deletedUser = await userModel.findByIdAndDelete(id);
     if (!deletedUser) {
@@ -260,17 +270,19 @@ const deleteUser = async (req, res) => {
 //Get User Profile
 const getUserProfile = async (req, res) => {
   try {
-    let id = req.params.id;
+    let userId = req.userId;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ msg: "Invalid Id" });
+    if (!userId) {
+      return res.status(400).json({ msg: "User Id is required" });
     }
 
-    let userData = await userModel.findById(id);
-    if (!userData) {
-      return res.status(404).json({ msg: "User Not Found" });
+    let user = await userModel.findById(userId).select("-password")
+
+    if(!user){
+      return res.status(404).json({msg : "user Not Found"})
     }
-    return res.status(200).json({ data: userData });
+
+    return res.status(200).json({ msg: "User Profile Fetched Successfully", data: user});
   } catch (error) {
     console.log(error);
     return res.status(500).json({ msg: "Internal server Error", error});
@@ -281,7 +293,19 @@ const getUserProfile = async (req, res) => {
 // Get all Users (Admin, Provider)
 const getAllUser = async (req, res)=>{
   try {
-    
+    if(req.userRole !== "admin"){
+      return res.status(403).json({msg: "Access Denied! Admins Only"});
+
+    }
+
+    let users = await userModel.find().select("-password").sort({createdAt: -1});
+
+    if(!users || users.length === 0){
+      return res.status(404).json({msg: "No users Found"});
+    }
+
+    return res.status(200).json({msg: "Users Fetched Successfully", totalUsers: users.length, data: users,});
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({ msg: "Internal server Error", error});
