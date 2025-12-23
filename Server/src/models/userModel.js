@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema({
         select: false,
     },
 
+    isBlocked:{
+        type: Boolean,
+        default: false,
+    },
+
     role:{
         type: String,
         enum: ["user", "provider", "admin"],
@@ -50,6 +55,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true,
     },
+
 }, 
 {timestamps: true}
 );

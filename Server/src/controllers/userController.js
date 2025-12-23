@@ -189,7 +189,7 @@ const updateUserProfile = async (req, res) => {
       return res.status(400).json({ msg: "add Request ! No data Provided." });
     }
 
-    let { name, email, phone, password } = userData;
+    let { name, email, phone} = userData;
     if (name !== undefined) {
       if (!isValid(name)) {
         return res.status(400).json({ msg: "Name is required" });
@@ -225,16 +225,16 @@ const updateUserProfile = async (req, res) => {
       }
     }
 
-    if (password !== undefined) {
-      if (!isValid(password)) {
-        return res.status(400).json({ msg: "password is required" });
-      }
-      if (!isValidPassword(password)) {
-        return res.status(400).json({ msg: "Invalid password" });
-      }
+    // if (password !== undefined) {
+    //   if (!isValid(password)) {
+    //     return res.status(400).json({ msg: "password is required" });
+    //   }
+    //   if (!isValidPassword(password)) {
+    //     return res.status(400).json({ msg: "Invalid password" });
+    //   }
 
-      userData.password = await bcrypt.hash(password, 10);
-    }
+    //   userData.password = await bcrypt.hash(password, 10);
+    // }
 
 
     let update = await userModel.findByIdAndUpdate(id, userData, { new: true });
@@ -315,7 +315,34 @@ const getAllUser = async (req, res)=>{
 // Block Unblock User(Admin)
 const blockUnblockUser = async (req, res)=>{
   try {
+    let userId = req.params.userId;
+    let {isBlocked} = req.body;
+
+    // if(mongoose.Types.ObjectId.isValid(userId)){
+    //   return res.status(400).json({msg: "Invalid User Id"})
+    // }
+
+    if(typeof isBlocked !== "boolean"){
+      return res.status(400).json({msg : "IsBlocked Must be a boolean value"})
+    }
+
+    let user = await userModel.findById(userId);
+    if(!user){
+      return res.status(400).json({mag: "User Not Found"})
+    }
     
+    if(user.role === "admin"){
+      return res.status(403).json({msg : "Admin cannot be blocked"})
+    }
+
+    user.isBlocked = isBlocked;
+
+    await user.save();
+
+    return res.status(200).json({msg : `user ${isBlocked ? "Blocked" : "UnBlocked"} Successfully`});
+
+
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({ msg: "Internal server Error", error});
@@ -326,7 +353,49 @@ const blockUnblockUser = async (req, res)=>{
 //Change Password
 const changePassword = async (req, res)=>{
   try {
+    let userId = req.userId;
+
+    let {oldPassword, newPassword} = req.body;
+
+    if(!req.body || Object.keys(req.body).length === 0){
+      return res.status(400).json({msg : "Bad Request ! No data Provided."});
+    }
+
     
+    if(!isValid(oldPassword)){
+      return res.status(400).json({msg : "Old Password is required"});
+    }
+
+    if(!isValid(newPassword)){
+      return res.status(400).json({msg : "New Password is required"});
+    }
+
+    if(!isValidPassword(newPassword)){
+      return res.status(400).json({msg : "Invalid New Password"});
+    }
+
+    let user = await userModel.findById(userId).select("+password");
+    if(!user){
+      return res.status(404).json({msg : "User Not Found"});
+    }
+
+    if(user.authProvider !== "manual"){
+      return res.status(400).json({msg : "password change allowed only for manual login users"});
+    }
+
+    let passwordMatch = await bcrypt.compare(oldPassword, user.password);
+
+    if(!passwordMatch){
+      return res.status(401).json({msg: "Old Password is Incorrect"});
+    }
+
+    let hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedNewPassword;
+
+    await user.save();
+
+    return res.status(200).json({msg : "Passsword Changed Successfully"});
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({ msg: "Internal server Error", error});

@@ -1,43 +1,80 @@
-const mongoose  = require("mongoose");
+const mongoose = require("mongoose");
 
-const providerSchema = new mongoose.Schema({
+const providerSchema = new mongoose.Schema(
+  {
     user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "user",
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "user",
+      required: true,
+      unique: true,
     },
-    servicesOffered:[
-        {
+
+    profession:{
+        type: String,
+        required: true,
+        trim: true,
+    },
+
+    experience:{
+        type: Number,
+        required: true,
+        min: 0,
+    },
+
+    bio:{
+        type: String,
+        trim: true,
+    },
+
+    location:{
+        city: String,
+        state: String,
+        pincode: String,
+    },
+
+    servicesOffered: [
+      {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "service"
-        },
+        ref: "service",
+      },
     ],
 
-    rating:{
-        type: Number,
-        default: 0,
+    rating: {
+      type: Number,
+      default: 0,
     },
 
-    reviews:[
-        {
+    reviews: [
+      {
         type: mongoose.Schema.Types.ObjectId,
         ref: "reviews",
-        },
+      },
     ],
 
-    availableSlots :[
-        {
+    availableSlots: [
+      {
         date: String,
-        time: String
-        },
+        time: String,
+      },
     ],
 
-    isApporved:{
-        type: Boolean,
-        default: false,
+    isApporved: {
+      type: Boolean,
+      default: false,
     },
 
-}, {timestamps: true}
+    verificationStatus:{
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "pending",
+    },
+
+    isActive:{
+        type: Boolean,
+        default: true
+    },
+  },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("provider", providerSchema);
